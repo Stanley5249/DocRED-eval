@@ -207,8 +207,7 @@ class ResultDocument(BaseModel):
     labels: Annotated[
         list[Label],
         Field(
-            description="List of labeled relations (`labels`) extracted for the document.",
-            min_length=1,
+            description="List of labeled relations (`labels`) extracted for the document."
         ),
     ]
 
