@@ -81,3 +81,9 @@ So, Google might secretly limit the output length or capability of the free API 
 ## Next
 
 We failed to achieve the original goal, but I have some ideas that worked pretty well on another project using Gemini-1.5-flash structured output mode.
+
+## Observations
+
+`google-generative-ai` is one of the worst Python packages I've ever encountered. However, Gemini itself isn't too bad. Interestingly, the `pydantic-ai` devs feel the same way and have re-implemented the API, sharing their thoughts on [the reference page](https://ai.pydantic.dev/api/models/gemini/).
+
+Also, the evaluation script in the `DocRED` repository is a nightmare and makes it harder to reach our goal. Nevertheless, thanks to the authors for providing the dataset.
