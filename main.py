@@ -1,4 +1,4 @@
-from pydantic_ai import Agent, UnexpectedModelBehavior
+from pydantic_ai import Agent, UnexpectedModelBehavior, capture_run_messages
 from pydantic_ai.models.gemini import GeminiModel
 from pydantic_core import to_json
 
@@ -131,21 +131,27 @@ agent = Agent(
     model_settings={"temperature": 0.0},
 )
 
-try:
-    result = agent.run_sync(user_prompt=user_prompt)
+with capture_run_messages() as messages:
+    try:
+        result = agent.run_sync(user_prompt=user_prompt)
 
-except UnexpectedModelBehavior:
-    raise
+    except UnexpectedModelBehavior as e:
+        print(e.message)
 
-else:
-    print(result.usage())
+        save_text(
+            dir_output / "messages.json",
+            to_json(messages, indent=2).decode(),
+        )
 
-    save_text(
-        dir_output / "messages.json",
-        to_json(result.all_messages(), indent=2).decode(),
-    )
+    else:
+        print(result.usage())
 
-    save_text(
-        dir_output / "pred_labels.json",
-        to_json(result.data, indent=2).decode(),
-    )
+        save_text(
+            dir_output / "messages.json",
+            to_json(result.all_messages(), indent=2).decode(),
+        )
+
+        save_text(
+            dir_output / "pred_labels.json",
+            to_json(result.data, indent=2).decode(),
+        )
