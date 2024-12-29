@@ -119,13 +119,14 @@ save_text(
 # ==============================================================================
 
 geimini = GeminiModel(
-    "gemini-1.5-pro",
+    "gemini-1.5-flash",
     api_key=GEMINI_API_KEY,
 )
 
 agent = Agent(
     model=geimini,
     result_type=list[ResultDocument],
+    system_prompt=system_prompt,
     model_settings={"temperature": 0.0},
 )
 
