@@ -70,13 +70,13 @@ Gemini seems to refuse to output long text in structured output mode, which is a
 
 The DocRED test set contains 3 million tokens, which is not the biggest problem for Gemini-1.5-flash, as it has a 1 million tokens context window. However, such a large input also means long output, and it has a max 8192 tokens output limit, which is not enough for the task.
 
-Even if the limit did not exist, the model still struggles to output enough labels for the task. It often outputs 0 labels for each document, which is not acceptable. Even the Gemini-1.5-pro version with structured output mode cannot solve the problem.
+<!-- Even if the limit did not exist, the model still struggles to output enough labels for the task. It often outputs 0 labels for each document, which is not acceptable. Even the Gemini-1.5-pro version with structured output mode cannot solve the problem.
 
 But this is weird; I don't think the model is incapable of this task. Thus, I tried to use the online Gemini-1.5-flash to perform the task, and it works better than the API version even though it cannot enable structured output mode. Here is the [online case](https://g.co/gemini/share/7cbbc6513c6a).
 
 Back to the API version, when I turn off the API version's structured output mode, it fails to output pure JSON data and generates a lot of garbage text.
 
-So, Google might secretly limit the output length or capability of the free API version, which is not mentioned in the documentation. This is a non-responsible guess, but I have no other explanation. There is too much variance for me to figure out the real reason.
+So, Google might secretly limit the output length or capability of the free API version, which is not mentioned in the documentation. This is a non-responsible guess, but I have no other explanation. There is too much variance for me to figure out the real reason. -->
 
 ## Next
 
