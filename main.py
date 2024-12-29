@@ -29,9 +29,9 @@ simple_docred_example = SimpleDocRED.model_validate(
                 {"id": 1, "text": "City B is part of Country C."},
             ],
             "entities": [
-                {"id": 0, "names": ["Entity A"], "sent_ids": [0]},
-                {"id": 1, "names": ["City B"], "sent_ids": [0, 1]},
-                {"id": 2, "names": ["Country C"], "sent_ids": [1]},
+                {"id": 0, "type": "Entity", "names": ["Entity A"], "sent_ids": [0]},
+                {"id": 1, "type": "City", "names": ["City B"], "sent_ids": [0, 1]},
+                {"id": 2, "type": "Country", "names": ["Country C"], "sent_ids": [1]},
             ],
         }
     ]
@@ -71,6 +71,7 @@ Additional fields in the training data:
   - `text`: The content of the sentence.  
 - `entities`: A list of entities in the document:  
   - `id`: Entity ID.  
+  - `type`: The type of the entity.
   - `names`: Names or aliases of the entity.  
   - `sent_ids`: The sentence IDs where the entity appears.
 

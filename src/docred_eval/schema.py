@@ -67,15 +67,17 @@ class Label(TypedDict):
 class Mention(TypedDict):
     """Represents a mention of an entity in a document. Used to build the item in `Document.vertex_set`."""
 
+    type: str
     name: str
-    pos: tuple[int, int]
     sent_id: int
+    pos: tuple[int, int]
 
 
 class Entity(TypedDict):
     """Represents a named entity in a document. Used to build `SimpleDocument.entities`."""
 
     id: int
+    type: str
     names: list[str]
     sent_ids: list[int]
 
@@ -121,6 +123,7 @@ class SimpleDocument(BaseDocument):
         vertex_set: list[Entity] = [
             {
                 "id": i,
+                "type": mentions[0]["type"],  # assert all mentions have the same type
                 "names": to_unique_list([item["name"] for item in mentions]),
                 "sent_ids": to_unique_list([item["sent_id"] for item in mentions]),
             }
