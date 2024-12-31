@@ -136,6 +136,36 @@ class SimpleDocument(BaseDocument):
             entities=vertex_set,
         )
 
+    def model_dump_features(self, **kwargs: Any) -> Any:
+        return self.model_dump(
+            mode="json",
+            by_alias=True,
+            exclude={"labels"},
+            **kwargs,
+        )
+
+    def model_dump_features_json(self, **kwargs: Any) -> str:
+        return self.model_dump_json(
+            by_alias=True,
+            exclude={"labels"},
+            **kwargs,
+        )
+
+    def model_dump_labels(self, **kwargs: Any) -> Any:
+        return self.model_dump(
+            mode="json",
+            by_alias=True,
+            include={"title", "labels"},
+            **kwargs,
+        )
+
+    def model_dump_labels_json(self, **kwargs: Any) -> str:
+        return self.model_dump_json(
+            by_alias=True,
+            include={"title", "labels"},
+            **kwargs,
+        )
+
 
 # ==============================================================================
 # top-level model
