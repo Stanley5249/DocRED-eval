@@ -1,23 +1,43 @@
-from pydantic_ai import Agent, UnexpectedModelBehavior, capture_run_messages
+import asyncio
+import json
+from collections import deque
+from functools import partial
+from typing import Annotated, Any, TypedDict
+
+from aiolimiter import AsyncLimiter
+from pydantic import Field
+from pydantic_ai import Agent
+from pydantic_ai.models import Model
 from pydantic_ai.models.gemini import GeminiModel
 from pydantic_core import to_json
 
 from docred_eval.project import GEMINI_API_KEY, dir_data, dir_output
 from docred_eval.schema import *
+from docred_eval.schema import ListModel
 from docred_eval.utils import save_text, yaml_dump_compact
 
-# ==============================================================================
-# Make the system prompt
-# ==============================================================================
+type DocEvalTask = tuple[int, SimpleDocument]
 
-# use the first 3 examples for few shot learning
-simple_docred_train = load_and_validate_simple_docred(
-    dir_data / "train_annotated.json",
-    s=slice(10),
-)
 
-simple_docred_example = SimpleDocRED.model_validate(
-    [
+class Relation(TypedDict):
+    title: str
+    r: RelationEnum
+    h: Annotated[int, Field(serialization_alias="h_idx")]
+    t: Annotated[int, Field(serialization_alias="t_idx")]
+    evidence: list[int]
+
+
+class Submission(ListModel[Relation]):
+    pass
+
+
+def make_system_prompt() -> str:
+    simple_docred_train = load_and_validate_simple_docred(
+        dir_data / "train_annotated.json",
+        s=slice(50),
+    )
+
+    simple_doc_example = SimpleDocument.model_validate(
         {
             "title": "Example Document",
             "labels": [
@@ -34,55 +54,54 @@ simple_docred_example = SimpleDocRED.model_validate(
                 {"id": 2, "type": "Country", "names": ["Country C"], "sent_ids": [1]},
             ],
         }
-    ]
-)
+    )
 
-system_prompt = f"""\
+    system_prompt = f"""\
 ## Document Relation Extraction Task  
 
-You are a machine learning engineer working on a document relation extraction task. The dataset is a simplified version of the DocRED dataset in YAML format. Your task is to predict a list of documents in JSON format. Be thorough and confident in identifying relations and their evidence.  
+You are a machine learning engineer working on a document relation extraction task. The dataset is a simplified version of the DocRED dataset in YAML format. Your task is to predict a list of labels in JSON format. Be thorough and confident in identifying relations and their evidence.  
 
 ### Guidelines for Predictions  
 
 1. **Output Format**  
-   Return a JSON array of documents. Each document must include its title and a list of extracted labels. Do not add any explanations or extra text.  
+Return a JSON array of labels. Do not add any explanations or extra text.  
 
 2. **Comprehensive Predictions**  
-   Extract as many relations as possible, including all relevant evidence. Multiple relations and evidence can exist for a single entity pair.  
+Extract as many relations as possible, including all relevant evidence. Multiple relations and evidence can exist for a single entity pair.  
 
 3. **Evaluation Metric**  
-   Your predictions will be evaluated using the micro F1 score, which emphasizes both accuracy and coverage of extracted relations.  
+Your predictions will be evaluated using the micro F1 score, which emphasizes both accuracy and coverage of extracted relations.  
 
 ### Schema  
 
-Each document in the output should have:  
+Each label in the output should have:  
 
-- `title`: The title of the document.  
-- `labels`: A list of relationships between entities, where each label includes:  
-  - `r`: The relation code (e.g., "P17" for "country").  
-  - `h`: The head entity ID.  
-  - `t`: The tail entity ID.  
-  - `evidence`: A list of sentence IDs supporting the relation.  
+- `r`: The relation code (e.g., "P17" for "country").  
+- `h`: The head entity ID.  
+- `t`: The tail entity ID.  
+- `evidence`: A list of sentence IDs supporting the relation.  
 
-Additional fields in the training data:  
+Each document in training data have:
 
+- `title`
+- `labels`: Same as the output labels.
 - `sents`: A list of sentences in the document:  
-  - `id`: Sentence ID.  
-  - `text`: The content of the sentence.  
+- `id`: Sentence ID.  
+- `text`: The content of the sentence.  
 - `entities`: A list of entities in the document:  
-  - `id`: Entity ID.  
-  - `type`: The type of the entity.
-  - `names`: Names or aliases of the entity.  
-  - `sent_ids`: The sentence IDs where the entity appears.
+- `id`: Entity ID.  
+- `type`: The type of the entity.
+- `names`: Names or aliases of the entity.  
+- `sent_ids`: The sentence IDs where the entity appears.
 
 ### Example Input (YAML)
 ```yaml
-{yaml_dump_compact(simple_docred_example.model_dump_features())}\
+{yaml_dump_compact(simple_doc_example.model_dump_features())}\
 ```
 
 ### Example Output (JSON)
 ```json
-{simple_docred_example.model_dump_labels_json()}
+{to_json(simple_doc_example.labels, by_alias=True).decode()}
 ```
 
 ### Relation Information
@@ -96,62 +115,114 @@ Additional fields in the training data:
 ```\
 """
 
-save_text(dir_output / "system_prompt.md", system_prompt)
+    save_text(dir_output / "system_prompt.md", system_prompt)
 
-# ==============================================================================
-# Make the user prompt
-# ==============================================================================
+    return system_prompt
 
-# use the first 3 test data for user prompt
-simple_docred_test = load_and_validate_simple_docred(
-    dir_data / "dev.json",
-    s=slice(1),
-)
 
-user_prompt = yaml_dump_compact(simple_docred_test.model_dump_features())
+def callback[T: tuple[int, Any]](
+    task: asyncio.Task[Any],
+    *,
+    done: list[T],
+    queue: deque[T],
+    item: T,
+) -> None:
+    if task.cancelled():
+        queue.appendleft(item)
+    else:
+        done.append(item)
 
-save_text(dir_output / "user_prompt.yaml", user_prompt)
-save_text(
-    dir_output / "true_labels.json", simple_docred_test.model_dump_labels_json(indent=2)
-)
+    print(f"done {item[0]}")
 
-# ==============================================================================
-# Run the model
-# ==============================================================================
 
-geimini = GeminiModel(
-    "gemini-1.5-flash",
-    api_key=GEMINI_API_KEY,
-)
+async def run_agent[T](
+    agent: Agent[None, T],
+    i: int,
+    doc: SimpleDocument,
+) -> T:
+    print(f"send {i}")
 
-agent = Agent(
-    model=geimini,
-    result_type=list[ResultDocument],
-    system_prompt=system_prompt,
-    model_settings={"temperature": 0.0},
-)
+    obj = doc.model_dump_features()
+    prompt = yaml_dump_compact(obj)
 
-with capture_run_messages() as messages:
     try:
-        result = agent.run_sync(user_prompt=user_prompt)
+        result = await agent.run(prompt)
 
-    except UnexpectedModelBehavior as e:
-        print(e.message)
-
-        save_text(
-            dir_output / "messages.json",
-            to_json(messages, indent=2).decode(),
-        )
+    except Exception:
+        raise asyncio.CancelledError()
 
     else:
-        print(result.usage())
+        return result.data
 
-        save_text(
-            dir_output / "messages.json",
-            to_json(result.all_messages(), indent=2).decode(),
-        )
 
-        save_text(
-            dir_output / "pred_labels.json",
-            to_json(result.data, indent=2).decode(),
-        )
+async def eval_docred(
+    *,
+    docred: SimpleDocRED,
+    model: Model,
+    system_prompt: str,
+    limiter: AsyncLimiter,
+) -> Submission:
+    agent = Agent(
+        model=model,
+        result_type=list[Label],
+        system_prompt=system_prompt,
+        model_settings={"temperature": 0.0},
+        retries=0,
+    )
+
+    n_docs = len(docred.root)
+
+    done: list[DocEvalTask] = []
+
+    queue: deque[DocEvalTask] = deque(enumerate(docred.root))
+
+    tasks: dict[int, asyncio.Task[list[Label]]] = {}
+
+    async with asyncio.TaskGroup() as g:
+        while len(done) < n_docs:
+            async with limiter:
+                if not queue:
+                    continue
+
+                i, doc = item = queue.popleft()
+                task = g.create_task(run_agent(agent, i, doc))
+                task.add_done_callback(
+                    partial(callback, done=done, queue=queue, item=item)
+                )
+                tasks[i] = task
+
+    relations = [
+        {"title": doc.title, **label}
+        for i, doc in enumerate(docred.root)
+        for label in tasks[i].result()
+    ]
+
+    return Submission.model_validate(relations)
+
+
+def main() -> None:
+    docred = load_and_validate_simple_docred(dir_data / "test.json")
+
+    model = GeminiModel("gemini-1.5-flash", api_key=GEMINI_API_KEY)
+
+    system_prompt = make_system_prompt()
+
+    limiter = AsyncLimiter(14, 60)
+
+    task = eval_docred(
+        docred=docred,
+        model=model,
+        system_prompt=system_prompt,
+        limiter=limiter,
+    )
+
+    submission = asyncio.run(task)
+
+    save_text(
+        dir_output / "result.json",
+        json.dumps(submission.model_dump(mode="json", by_alias=True)),
+    )
+
+
+if __name__ == "__main__":
+    main()
