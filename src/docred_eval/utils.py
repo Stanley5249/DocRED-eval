@@ -20,6 +20,7 @@ def yaml_dump_compact(obj: Any) -> str:
     return yaml.safe_dump(obj, default_flow_style=True, width=inf, sort_keys=False)
 
 
-def save_text(path: StrPath, text: str):
+def save_text(path: StrPath, text: str) -> int:
     n_char = Path(path).write_text(text)
     print(f"Saved {n_char} characters to {path}")
+    return n_char
