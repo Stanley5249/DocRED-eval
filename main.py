@@ -56,7 +56,7 @@ def make_system_prompt() -> str:
         }
     )
 
-    system_prompt = f"""\
+    return f"""\
 ## Document Relation Extraction Task  
 
 You are a machine learning engineer working on a document relation extraction task. The dataset is a simplified version of the DocRED dataset in YAML format. Your task is to predict a list of labels in JSON format. Be thorough and confident in identifying relations and their evidence.  
@@ -114,10 +114,6 @@ Each document in training data have:
 {yaml_dump_compact(simple_docred_train.model_dump(mode="json", by_alias=True))}\
 ```\
 """
-
-    save_text(dir_output / "system_prompt.md", system_prompt)
-
-    return system_prompt
 
 
 def callback[T: tuple[int, Any]](
@@ -206,6 +202,7 @@ def main() -> None:
     model = GeminiModel("gemini-1.5-flash", api_key=GEMINI_API_KEY)
 
     system_prompt = make_system_prompt()
+    save_text(dir_output / "system_prompt.md", system_prompt)
 
     limiter = AsyncLimiter(14, 60)
 
